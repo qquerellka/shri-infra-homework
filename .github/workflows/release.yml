@@ -46,7 +46,7 @@ jobs:
           docker tag $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} $REGISTRY/$IMAGE_NAME:${{ env.VERSION }}_latest
 
       - name: Login to Yandex Cloud Container Registry
-        run: echo "${{ secrets.YC_CR_PASSWORD }}" | docker login --username "${{ secrets.YC_CR_LOGIN }}" --password-stdin cr.yandex
+        run: echo "${{ secrets.YC_CR_PASSWORD }}" | docker login --username iam --password-stdin cr.yandex
 
       - name: Push Docker image
         run: |
