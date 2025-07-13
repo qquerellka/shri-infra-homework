@@ -43,23 +43,9 @@ jobs:
         run: |
           docker build -t $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} .
           docker tag $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} $REGISTRY/$IMAGE_NAME:${{ env.VERSION }}_latest
-      
-      - name: Check jq version
-        run: jq --version
 
-      - name: Generate IAM token from key.json
-        id: auth
-        run: |
-          echo '${{ secrets.YC_CR_PASSWORD }}' > key.json
-          export IAM_TOKEN=$(curl -s -X POST \
-            -H "Content-Type: application/json" \
-            -d @key.json \
-            https://iam.api.cloud.yandex.net/iam/v1/tokens | jq -r '.iamToken')
-          echo "::add-mask::$IAM_TOKEN"
-          echo "IAM_TOKEN=$IAM_TOKEN" >> $GITHUB_ENV
-
-      - name: Login to Yandex Cloud Container Registry
-        run: echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
+      - name: Login with OAuth token
+        run: echo "${{ secrets.YC_OAUTH_TOKEN }}" | docker login --username oauth --password-stdin cr.yandex
 
       - name: Push Docker image
         run: |
