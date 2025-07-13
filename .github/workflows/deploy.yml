@@ -1,0 +1,32 @@
+name: Deploy to Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version (e.g. 5 or 5_fix1)'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set tag and image
+        run: |
+          echo "VERSION=${{ github.event.inputs.release_version }}" >> $GITHUB_ENV
+          echo "IMAGE=cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}" >> $GITHUB_ENV
+
+      - name: Create SSH key
+        run: |
+          echo "${{ secrets.DEPLOY_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Deploy to server
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            docker pull ${{ env.IMAGE }}
+            docker stop app || true
+            docker rm app || true
+            docker run -d --name app -p 3000:3000 ${{ env.IMAGE }}
+          EOF
