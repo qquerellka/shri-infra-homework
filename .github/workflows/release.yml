@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}
+  IMAGE_NAME: app
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Get release version
+        id: get_version
+        run: echo "VERSION=${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Create release branch
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout -b releases/${{ env.VERSION }}
+          git push origin releases/${{ env.VERSION }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} .
+          docker tag $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} $REGISTRY/$IMAGE_NAME:${{ env.VERSION }}_latest
+
+      - name: Login to Yandex Cloud Container Registry
+        run: echo "${{ secrets.YC_CR_PASSWORD }}" | docker login --username "${{ secrets.YC_CR_LOGIN }}" --password-stdin cr.yandex
+
+      - name: Push Docker image
+        run: |
+          docker push $REGISTRY/$IMAGE_NAME:${{ env.VERSION }}
+          docker push $REGISTRY/$IMAGE_NAME:${{ env.VERSION }}_latest
+
+      - name: Create git tag
+        run: |
+          git tag v${{ env.VERSION }}
+          git push origin v${{ env.VERSION }}
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%an)")
+          echo "COMMITS<<EOF" >> $GITHUB_ENV
+          echo "$COMMITS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Write issue content to file
+        run: |
+          echo "## Release v${{ env.VERSION }}" > RELEASE.md
+          echo "Дата: $(date +'%Y-%m-%d')" >> RELEASE.md
+          echo "Автор: ${{ github.actor }}" >> RELEASE.md
+          echo "" >> RELEASE.md
+          echo "Docker image:" >> RELEASE.md
+          echo "\\`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ env.VERSION }}\\`" >> RELEASE.md
+          echo "" >> RELEASE.md
+          echo "Коммиты:" >> RELEASE.md
+          echo "$COMMITS" >> RELEASE.md
+
+      - name: Create GitHub Issue
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          title: Release v${{ env.VERSION }}
+          content-file: ./RELEASE.md
+          labels: release
+
