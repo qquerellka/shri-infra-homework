@@ -30,7 +30,6 @@ jobs:
         run: npm test
 
       - name: Get release version
-        id: get_version
         run: echo "VERSION=${{ github.run_number }}" >> $GITHUB_ENV
 
       - name: Create release branch
@@ -45,8 +44,19 @@ jobs:
           docker build -t $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} .
           docker tag $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} $REGISTRY/$IMAGE_NAME:${{ env.VERSION }}_latest
 
+      - name: Generate IAM token from service account key
+        id: auth
+        run: |
+          echo '${{ secrets.YC_CR_PASSWORD }}' > key.json
+          export IAM_TOKEN=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d @key.json \
+            https://iam.api.cloud.yandex.net/iam/v1/tokens | jq -r '.iamToken')
+          echo "::add-mask::$IAM_TOKEN"
+          echo "IAM_TOKEN=$IAM_TOKEN" >> $GITHUB_ENV
+
       - name: Login to Yandex Cloud Container Registry
-        run: echo "${{ secrets.YC_CR_PASSWORD }}" | docker login --username iam --password-stdin cr.yandex
+        run: echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
 
       - name: Push Docker image
         run: |
@@ -59,7 +69,6 @@ jobs:
           git push origin v${{ env.VERSION }}
 
       - name: Generate changelog
-        id: changelog
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%an)")
@@ -74,7 +83,7 @@ jobs:
           echo "Автор: ${{ github.actor }}" >> RELEASE.md
           echo "" >> RELEASE.md
           echo "Docker image:" >> RELEASE.md
-          echo "\\`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ env.VERSION }}\\`" >> RELEASE.md
+          echo "\\`$REGISTRY/$IMAGE_NAME:${{ env.VERSION }}\\`" >> RELEASE.md
           echo "" >> RELEASE.md
           echo "Коммиты:" >> RELEASE.md
           echo "$COMMITS" >> RELEASE.md
@@ -85,4 +94,3 @@ jobs:
           title: Release v${{ env.VERSION }}
           content-file: ./RELEASE.md
           labels: release
-
