@@ -43,8 +43,11 @@ jobs:
         run: |
           docker build -t $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} .
           docker tag $REGISTRY/$IMAGE_NAME:${{ env.VERSION }} $REGISTRY/$IMAGE_NAME:${{ env.VERSION }}_latest
+      
+      - name: Check jq version
+        run: jq --version
 
-      - name: Generate IAM token from service account key
+      - name: Generate IAM token from key.json
         id: auth
         run: |
           echo '${{ secrets.YC_CR_PASSWORD }}' > key.json
